@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+X-Nemo-Application-Type=silica-qt5
+Name=default-app
+Icon=default-app
+Exec=sailfish-qml default-app

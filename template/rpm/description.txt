@@ -1,0 +1,3 @@
+Summary of a Sailfish OS sample application written in Python.
+
+Main description (including the summary) of the Sailfish OS Python application.

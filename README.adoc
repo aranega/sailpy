@@ -1,0 +1,210 @@
+= SailPy, a Sailfish Python Project Generator
+
+This little script allows you to quickly generate a fully configured Python/QML
+project for SailfishOS. Beside the "basic template" for the Python/QML project,
+SailPy also fetch and includes your "pip installed" Python dependencies to your
+final `.rpm` (following your `requirement.txt`)
+
+This script is greatly inspired from the
+https://github.com/dasimmet/Sailfish-Python template and uses:
+
+* https://github.com/jordansissel/fpm[fpm] for RPM building
+* https://github.com/berdario/pew[pew] for Python virtualenv management
+* `rpmbuild` (used by `fpm`, for archlinux users, you can install `rpm-org` from
+  AUR)
+* https://sailfishos.org/develop/sdk-overview[SailfishSDK] for the mer build
+  engine (only partially used) and the emulator -- **optional** (but
+    recommended)
+
+Also, it must be said that I'm not a Python guru at all. So, if you find
+incoherent stuffs or you are willing to improve, contribute, of course, feel
+free to do so.
+
+== Why this?
+
+The main difficulty when you are dealing with a SailfishOS Python project is the
+lake of official/openrepo Python packages (beside the project template
+creation). The easiest way of using your favourite library is by manually
+integreating it (and its potential dependencies) in somwhere in your project.
+The aim of SailPy is to use Python virtual env, so you can install your
+dependencies using `pip`, and once they are reported in the `requirements.txt`
+file, the `Makefile` gets them from your virtual env and put them at the right
+place in your `rpm`.
+
+The `Makefile` allows you to quickly verify if your builded `rpm` is "harbour"
+compatible (requires the `mer-engine`) and to deploy it on the Emulator. It also
+gives you the ability to deploy your archive on your phone using usb or ssh.
+
+Finally, the `rpm` creation is simplified, you only have to put the minimal
+informations in `config.yml` and put your package description in
+`desctiption.txt`. The `Makefile` will take these information and generate the
+corresponding `rpm`.
+
+
+== Technically, what does it do?
+
+When you create your project, SailPy creates, at the same time, a virtual env
+(using `pew`) with the same name. You then play with `pip`, add your required
+dependencies to `requirements.txt`, then you ask for a build.
+
+During the build process, the `./rpm/extract-deps.bash` (created in your
+projec), will recursively compute the required files from your
+`requirements.txt`. These files (the libs you want) are placed into a tmp
+directory `tmp-deps` and are re-fetched each time you modify your
+`requirements.txt`.
+
+
+== Requirements
+
+To use SailPy, you'll need a bunch of existing tools:
+
+* `pew`,
+* `fpm`
+* `rpmbuild`
+
+Depending on your distribution, you will find that they are often quite easy to
+install or already existing.
+
+(for Archlinux user like myself, the only frustration comes from the `fpm`
+installation which was through `gem` as the AUR package is deprecated.)
+
+== Installation
+
+SailPy is only a bash script, an installation process can be, the repository
+clone:
+
+    $ git clone https://github.com/aranega/sailpy.git
+
+Then, create an alias in your `.bashrc`:
+
+    alias sailpy=~/path/to/the/repository/sailpy
+
+A little `source ~/.bashrc` and you're good to go.
+
+=== First Launch
+
+During your first launch, SailPy will ask you where you installed your
+SailfishSDK.
+
+    $ sailpy
+    Choose your SailfishOS SDK path (default is /home/vince/SailfishOS):
+
+This information is then stored in a `.sailpy` file at the root of your `home`
+and is used to create a `.sailpy-init` file at the root of your future projects
+(in order to avoid to "double init" your project).
+
+=== Change the Default Templates
+
+In the repository the `template` directory contains the templates used during
+project creation/initialisation. You can modify them as you want.
+
+== Usage
+
+=== Create a new Project
+
+The syntax to create a new project is `sailpy create harbour-PROJECT [LOCATION]`
+
+----
+... create a new project in '.' and activate the virtual env
+$ sailpy create harbour-myproject
+    (init log, virtual env creation...etc)
+
+... create a new project in '/tmp' and activate the virtual env
+$ sailpy create harbour-myproject /tmp
+    (init log, virtual env creation...etc)
+----
+
+=== Activate/Work on an Existing Project
+
+If you have leave your virtual env and need to go back to continue your work,
+use this syntax: `sailpy workon LOCATION`
+
+----
+... activate/work on the harbour-myproject in '/tmp'
+$ sailpy workon /tmp/harbour-myproject
+----
+
+=== Delete an Existing Project (/!\ currently no confirmation)
+
+You can delete a project using this syntax: `sailpy rm LOCATION`. The project
+deletion will only apply if a `.sailpy-init` file exists in `LOCATION`.
+Otherwise, `sailpy` will refuse to delete the directory. The project deletion
+will also delete the associated virtual env.
+
+----
+... trying to delete /tmp (non sailpy project)
+$ sailpy rm /tmp
+Project tmp is not a sailpy project
+
+... delete /tmp/harbour-tmp
+$ sailpy rm /tmp/harbour-tmp
+Deleting harbour-myproject virtualenv...
+Deleting project harbour-myproject...
+----
+
+=== Example Scenario (installing http://flask.pocoo.org/[flask])
+
+----
+... we create the project
+$ sailpy create harbour-test /tmp
+    (init log ... and activate virtual env)
+
+... we put the Python dependencies we need ans install them
+(harbour-test)$ echo "flask>=0.11" > requirements.txt
+(harbour-test)$ pip install -r requirements.txt
+Collecting flask>=0.11 (from -r requirements.txt (line 1))
+  Using cached Flask-0.11.1-py2.py3-none-any.whl
+Collecting Werkzeug>=0.7 (from flask>=0.11->-r requirements.txt (line 1))
+    ...
+
+... Just for exposition purpose, we 'fetch' the dependencies (the makefile)
+... do it, this step is not required (not required)
+(harbour-test)$ ./rpm/extract-deps.bash
+Fetch dependencies from your requirement.txt and put them in ./tmp-deps
+Copying Python packages...
+* click
+* flask
+* itsdangerous.py
+* jinja2
+* markupsafe
+* werkzeug
+
+... we create a rpm
+(harbour-test)$ make rpm
+    (copy files, create archive struct and run fpm)
+(harbour-test)$ ls *.rpm
+harbour-test-0.0.1-1.noarch.rpm
+
+... we validate it (just to see, here, it's optional)
+(harbour-test)$ make rpm-validation
+    ...a lot of stuffs here...
+Validation succeeded: /tmp/harbour-test-0.0.1-1.noarch.rpm
+Clean up
+
+... we make/deploy it in the running Emulator
+(harbour-test)$ make make-virt
+----
+
+== Limitations
+
+Unlike the https://github.com/dasimmet/Sailfish-Python template, SailPy only
+deals with `noarch` python packages, so if an architecture dependent library
+must be installed, then you have to manually take it and place the `i386` and
+the `armv7` version in the `pyPackages` folder and modify the `Makefile` the
+`rpm-build-xxx` rules looks like the ones in
+https://github.com/dasimmet/Sailfish-Python/blob/master/Makefile[this
+`Makefile`].
+
+== TODO
+
+* rename project/virtualenv
+* deal with architecture dependent packages
+* use the mer engine to build the `rpm` instead of `fpm` (?)
+* version auto-upgrade
+
+== Changelog
+
+=== 0.1
+
+* First commit, use `pew`, `fpm`, `rpmbuild` and the mer engine (for `rpm`
+  verification)

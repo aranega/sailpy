@@ -1,0 +1,16 @@
+#
+# Python gitignore
+#
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# SailPy files
+.sailpy-init
+config.make
+tmp-deps/
+
+# Emacs files
+*~

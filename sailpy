@@ -1,0 +1,239 @@
+#!/usr/bin/env bash
+
+TEMPLATEDIR=template
+CONFIGFILE=~/.sailpy
+
+THIS_PATH=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+TEMPLATEPATH="$THIS_PATH/$TEMPLATEDIR"
+SAILPY_VERSION=0.1
+
+usage="Setup/Manage Python/QML projects for SailfishOS
+
+  $ $(basename "$0") (create | workon | rm) ARGUMENTS
+  where:
+    -h, --help    show this help
+
+  Creates a new project, create a dedicated virtualenv and activate it
+  $ $(basename "$0") create PROJECT_NAME [LOCATION]
+  where:
+    PROJECT_NAME  the new project name
+    LOCATION      *optional* the path where the project will be created, default is '.'
+
+  Activates the virtualenv dedicated to a project
+  $ $(basename "$0") workon PROJECT_NAME
+  where:
+    PROJECT_NAME  the new project name
+
+  Deletes the project and its dedicated virtualenv
+  $ $(basename "$0") rm PROJECT_PATH
+  where:
+    PROJECT_PATH  the path to the project to delete.
+"
+
+if [ ! -f "$CONFIGFILE" ]; then
+	SAILFISHSDK=~/SailfishOS
+	read -r -p "Choose your SailfishOS SDK path (default is $SAILFISHSDK): " SAILFISHSDK
+	echo "SAILFISHSDK=$SAILFISHSDK" > "$CONFIGFILE"
+else
+	source "$CONFIGFILE"
+fi
+export SAILFISHSDK
+
+pythoninstall=$(which python3 2> /dev/null)
+function check_requirements()
+{
+	local pewinstall=$(which pew 2> /dev/null)
+	local fpminstall=$(which fpm 2> /dev/null)
+  local rpmbuildinstall=$(which rpmbuild 2> /dev/null)
+  local missing=false
+
+  [ -z "$pythoninstall" ] && {
+    echo "Python3 is required to create this project (and to use pyotherside)" >&2
+    missing=true
+  }
+	[ -z "$pewinstall" ] && {
+		echo "Pew is missing, please install it" >&2
+		missing=true
+	}
+	[ -z "$fpminstall" ] && {
+		echo "Fpm is missing, please install it" >&2
+		missing=true
+	}
+  [ -z "$rpmbuildinstall" ] && {
+    echo "Python3 is required to create this project (and to use pyotherside)" >&2
+    missing=true
+  }
+
+	[ "$missing" = true ] && {
+		exit 3
+	}
+}
+
+function create()
+{
+	local name="$1"
+	[[ ! "$name" =~ "harbour-" ]] && {
+		echo "Your project name MUST begin with 'harbour-'" >&2
+		echo "See https://harbour.jolla.com/faq" >&2
+		exit 3
+	}
+
+	local location="$(cd "$2" && pwd)"
+  local locname="${location/*\/}"
+	echo "Create project '$name' in '$locname'"
+	mkdir -p "$location/$name"
+	init "$name" "$location/$name"
+}
+
+function init()
+{
+	local name="$1"
+	local projectdir="$2"
+	if [ -f "$projectdir/.sailpy-init" ]; then
+		return
+	fi
+	init_templates "$name" "$projectdir"
+	echo "Creating virtual env..."
+	(cd "$projectdir" && pew new -p "$pythoninstall" "$name")
+}
+
+function init_templates()
+{
+	local name="$1"
+	local projectdir="$2"
+
+	echo "Init QML directory..."
+	cp -r "$TEMPLATEPATH/qml" "$projectdir"
+	local mainqml="$projectdir/qml/default-app.qml"
+	#sed -i "s/#PROJECT_NAME#/$name/" "$mainqml"
+	mv "$mainqml" "$projectdir/qml/$name.qml"
+
+	echo "Init 'src' directory..."
+	cp -r "$TEMPLATEPATH/src" "$projectdir/"
+
+	echo "Copy Makefile..."
+	cp "$TEMPLATEPATH/Makefile" "$projectdir/"
+
+	echo "Create additional Python lib directory..."
+	cp -r "$TEMPLATEPATH/pyPackages" "$projectdir/"
+
+	echo "Add empty 'requirements.txt' and 'rpm-dependencies.txt'..."
+	echo "# Python 'pip' package go there " > "$projectdir/requirements.txt"
+
+	echo "Add icon and desktop entry..."
+	mkdir -p "$projectdir/data"
+	cp "$TEMPLATEPATH/data/default-app.desktop" "$projectdir/data/$name.desktop"
+	cp "$TEMPLATEPATH/data/appicon.png" "$projectdir/data/"
+	local tempfile="$(mktemp -t temp.XXXXX)"
+	sed "s/default-app/$name/" "$projectdir/data/$name.desktop" > "${tempfile}" && mv "${tempfile}" "$projectdir/data/$name.desktop"
+
+	echo "Init rpm config..."
+  mkdir -p "$projectdir/rpm"
+  cp "$TEMPLATEPATH/rpm/"* "$projectdir/rpm/"
+  cp "$TEMPLATEPATH/devenv-init.bash" "$projectdir/"
+
+	echo "Init changelog..."
+	local localtime=$(LC_TIME=us_US.utf8 date +"%a %b %d %Y")
+  echo "# Add new changelog entries following the format below.
+# Add newest entries to the top of the list.
+# Separate entries from eachother with a blank line.
+
+# * date Author's Name <author's email> version-release
+# - Summary of changes
+
+* $localtime $USER 0.0.1
+- initial commit- initial commit
+" > "$projectdir/changelog.txt"
+
+	echo "Copy .gitignore..."
+	cp "$TEMPLATEPATH/gitignore" "$projectdir/.gitignore"
+
+  # Mark the project as already initialized
+  echo "$SAILFISHSDK" > "$projectdir/.sailpy-init"
+}
+
+while [[ "$#" -gt 0 ]]
+do
+	case "$1" in
+		create)
+			check_requirements
+			PROJECT_NAME="$2"; LOCATION="$3"
+			LOCATION="${LOCATION%/}"
+			[ -z "$PROJECT_NAME" ] && {
+				echo "Project name is missing" >&2
+				exit 1
+			}
+			[ -z "$LOCATION" ] && {
+				LOCATION="."
+			}
+			create "$PROJECT_NAME" "$LOCATION"
+			exit 0
+			;;
+
+		init)
+			check_requirements
+			LOCATION="$2"
+			[ -z "$LOCATION" ] && {
+				LOCATION="."
+			}
+			NAME="$(cd "$LOCATION" && pwd)"
+      NAME="${NAME/*\/}"
+			init "$NAME" "$LOCATION"
+			exit 0
+			;;
+
+		rm)
+			check_requirements
+			LOCATION="$2";
+			[ -z "$LOCATION" ] && {
+				echo "Project location is missing" >&2
+				exit 1
+			}
+			NAME="$(cd "$LOCATION" 2> /dev/null && pwd)"
+      [ "$?" -ne 0 ] && {
+        echo "Project location: $LOCATION does not exist"
+        exit 4
+      }
+      NAME="${NAME/*\/}"
+      [ ! -f "$LOCATION/.sailpy-init" ] && {
+        echo "Project $NAME is not a sailpy project" >&2
+        exit 2
+      }
+      virt=$(pew show "$NAME" 2> /dev/null)
+      [ ! -z "$virt" ] && {
+        echo "Deleting "$NAME" virtualenv..."
+        pew rm "$NAME"
+      }
+      echo "Deleting project $NAME..."
+			rm -r "$LOCATION"
+			exit 0
+			;;
+
+		workon)
+			check_requirements
+			NAME="$2"
+			[ -z "$NAME" ] && {
+				echo "Project name is missing" >&2
+				exit 1
+			}
+			pew workon "$NAME"
+			exit 0
+			;;
+
+    -v|--version)
+      echo "SailPy $SAILPY_VERSION"
+      exit 0
+      ;;
+
+		-h|--help)
+			echo "$usage"
+			exit 0
+			;;
+
+		*)
+			echo "Unknown argument: $1" >&2
+			exit -1
+		;;
+	esac
+	shift
+done

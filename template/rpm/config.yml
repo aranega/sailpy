@@ -1,0 +1,15 @@
+#
+# Yaml like config ( /!\ not all yaml is supported, especially |)
+#
+
+Version: 0.0.1
+
+URL: https://github.com/sailfish-sdk
+License: LICENSE
+Maintainer: user@mail.com
+
+# Runtime dependencies which are not automatically detected
+Requires:
+  - libsailfishapp-launcher
+  - sailfishsilica-qt5 >= 0.10.9
+  - pyotherside-qml-plugin-python3-qt5
