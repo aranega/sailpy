@@ -53,12 +53,17 @@ projec), will recursively compute the required files from your
 directory `tmp-deps` and are re-fetched each time you modify your
 `requirements.txt`.
 
+== Caution
+
+The script had been tested a lot, but there is always a change that I missed
+something. If you see errors or bad practice stuffs by reading the code, please
+report them or propose a pull request as quickly as possible.
 
 == Requirements
 
 To use SailPy, you'll need a bunch of existing tools:
 
-* `pew`,
+* `pew`
 * `fpm`
 * `rpmbuild`
 
