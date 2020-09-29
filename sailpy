@@ -60,7 +60,7 @@ function check_requirements()
 		missing=true
 	}
   [ -z "$rpmbuildinstall" ] && {
-    echo "Python3 is required to create this project (and to use pyotherside)" >&2
+    echo "Rpmbuild is missing, please install it" >&2
     missing=true
   }
 
